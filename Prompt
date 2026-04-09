@@ -1,1 +1,101 @@
+You are an expert Python and ML engineer. Build a single Python script called
+`process_rationalization.py` that analyzes process-to-database relationships
+and classifies them using ML-based set similarity techniques.
+
+═══════════════════════════════════════════════════════
+INPUT
+═══════════════════════════════════════════════════════
+JSON file with this exact structure:
+{
+  "P1": ["db1", "db3", "db4"],
+  "P2": ["db1", "db3"],
+  "P3": ["db5", "db6"]
+}
+Each key is a processId, value is list of database names it uses.
+
+═══════════════════════════════════════════════════════
+OUTPUT
+═══════════════════════════════════════════════════════
+output.xlsx with exactly 3 tabs:
+
+TAB 1 — Exact_Match
+  Columns: Process_A | Process_B | Common_DBs | Total_DBs | Match_%
+  Condition: Jaccard == 1.0 (sets are identical)
+
+TAB 2 — Overlap
+  Columns: Process_A | Process_B | Overlap_Type | Common_DBs |
+           Only_in_A | Only_in_B | Jaccard_Score | Overlap_%
+  Overlap_Type values: "Subset" (one set fully inside other)
+                       "Partial" (some common, neither contains other)
+  Condition: 0 < Jaccard < 1.0
+
+TAB 3 — Disjoint
+  Columns: Process_A | Process_B | DBs_in_A | DBs_in_B | Reason
+  Condition: Jaccard == 0 (no common databases)
+
+All DB columns should be pipe-separated strings e.g. "db1|db3|db4"
+
+═══════════════════════════════════════════════════════
+ML PIPELINE (non-LLM)
+═══════════════════════════════════════════════════════
+Step 1 — Load & parse JSON into {processId: set(databases)}
+Step 2 — Encode using sklearn MultiLabelBinarizer → binary matrix
+Step 3 — Compute pairwise Jaccard similarity matrix using scipy
+Step 4 — Run DBSCAN on (1 - Jaccard) distance matrix for clustering
+Step 5 — Classify every unique pair (Pi, Pj) using this logic:
+           if intersection == set_A == set_B  → Exact
+           elif intersection == set_A or == set_B → Overlap/Subset
+           elif 0 < |intersection| < |union|  → Overlap/Partial
+           else                               → Disjoint
+Step 6 — Enrich each pair: common_dbs, only_in_A, only_in_B, jaccard, overlap_pct
+Step 7 — Write to 3 Excel tabs using openpyxl
+
+═══════════════════════════════════════════════════════
+CODE STRUCTURE (single file, in this order)
+═══════════════════════════════════════════════════════
+# ── CONFIG ──────────────────────────────────────────
+INPUT_FILE               = "input.json"
+OUTPUT_FILE              = "output.xlsx"
+PARTIAL_OVERLAP_MIN_JACCARD = 0.1   # below this treat as disjoint
+DBSCAN_EPS               = 0.5
+DBSCAN_MIN_SAMPLES       = 1
+
+# ── IMPORTS ─────────────────────────────────────────
+json, itertools, pandas, numpy,
+sklearn (MultiLabelBinarizer, DBSCAN),
+scipy.spatial.distance (jaccard),
+openpyxl
+
+# ── FUNCTIONS (in this order) ────────────────────────
+def load_data(filepath) -> dict[str, set]
+def encode_features(process_db_map) -> (binary_matrix, binarizer, process_ids)
+def compute_jaccard_matrix(binary_matrix) -> ndarray
+def run_clustering(jaccard_matrix) -> cluster_labels
+def classify_pairs(process_db_map, jaccard_matrix, process_ids) -> (exact, overlap, disjoint)
+def enrich_pair(set_a, set_b) -> dict with all metrics
+def write_output(exact_rows, overlap_rows, disjoint_rows, output_path)
+def main()
+
+═══════════════════════════════════════════════════════
+REQUIREMENTS
+═══════════════════════════════════════════════════════
+- Pure Python + standard ML libs only (no LLMs, no OpenAI, no langchain)
+- Cluster labels from DBSCAN should be added as a column "Cluster_ID"
+  in Overlap and Exact tabs so grouped processes are visible
+- All pairs must be evaluated — not just within clusters
+- overlap_pct = (|intersection| / |smaller set|) * 100
+  so subset shows 100% even if Jaccard < 1
+- Add docstrings to every function
+- Add a CLI entrypoint:
+  python process_rationalization.py --input input.json --output output.xlsx
+- Wrap main() in if __name__ == "__main__"
+- Handle edge cases: single process, all identical, all disjoint
+
+═══════════════════════════════════════════════════════
+LIBRARIES TO USE
+═══════════════════════════════════════════════════════
+pip install pandas openpyxl scikit-learn scipy numpy
+
+Do not use any other external libraries.
+Generate the complete working script with no placeholders.
 
